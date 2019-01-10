@@ -1,4 +1,4 @@
-﻿using Sys = global::System;
+using Sys = global::System;
 using SysClG = global::System.Collections.Generic;
 using SysCoS = global::System.Runtime.CompilerServices;
 using SysDiag = global::System.Diagnostics;
@@ -83,10 +83,14 @@ namespace Libs.PathFinder
         public int DimY { get; private set; }
         /* https://www.dotnetperls.com/aggressiveinlining , https://stackoverflow.com/questions/43060376/aggressiveinlining-doesnt-exist */ [SysCoS.MethodImpl(256)] internal int GetIndexUnchecked(int x, int y) { return (this.DimX * y) + x; }
         private int GetIndex(int x, int y) { if (x < 0 || x >= this.DimX) { throw new Sys.ArgumentOutOfRangeException("The x-coordinate " + x.ToString() + " is outside of the expected range [0..." + this.DimX.ToString() + ")"); } else if (y < 0 || y >= this.DimY) { throw new Sys.ArgumentOutOfRangeException("The y-coordinate " + y.ToString() + " is outside of the expected range [0..." + this.DimY.ToString() + ")"); } else { return this.GetIndexUnchecked(x, y); } }
-        public void SetCellCost(LibPF.Position position, float cost) { if (cost < 1) { throw new Sys.ArgumentOutOfRangeException("Argument cost with value " + cost.ToString() + " is invalid. The cost of traversing a cell cannot be less than one"); } else { this.Weights[this.GetIndex(position.X, position.Y)] = cost; } }
-        public float GetCellCost(LibPF.Position position) { return this.Weights[this.GetIndex(position.X, position.Y)]; }
-        public void BlockCell(LibPF.Position position) { this.SetCellCost(position, float.PositiveInfinity); }
-        public void UnblockCell(LibPF.Position position) { this.SetCellCost(position, this.DefaultCost); }
+        public void SetCellCost(int X, int Y, float cost) { if (cost < 1) { throw new Sys.ArgumentOutOfRangeException("Argument cost with value " + cost.ToString() + " is invalid. The cost of traversing a cell cannot be less than one"); } else { this.Weights[this.GetIndex(X, Y)] = cost; } }
+        public void SetCellCost(LibPF.Position position, float cost) { this.SetCellCost(position.X, position.Y, cost); }
+        public float GetCellCost(int X, int Y) { return this.Weights[this.GetIndex(X, Y)]; }
+        public float GetCellCost(LibPF.Position position) { return this.GetCellCost(position.X, position.Y); }
+        public void BlockCell(int X, int Y) { this.SetCellCost(X, Y, float.PositiveInfinity); }
+        public void BlockCell(LibPF.Position position) { this.BlockCell(position.X, position.Y); }
+        public void UnblockCell(int X, int Y) { this.SetCellCost(X, Y, this.DefaultCost); }
+        public void UnblockCell(LibPF.Position position) { this.SetCellCost(position.X, position.Y, this.DefaultCost); }
         internal float GetCellCostUnchecked(LibPF.Position position) { return this.Weights[this.GetIndexUnchecked(position.X, position.Y)]; }
         public LibPF.Position[] GetPath(LibPF.Position start, LibPF.Position end) { return this.GetPath(start, end, LibPF.MovementPatterns.Full); }
         public LibPF.Position[] GetPath(LibPF.Position start, LibPF.Position end, LibPF.Offset[] movementPattern) { return this.GetPath(start, end, movementPattern, int.MaxValue); }
@@ -126,7 +130,7 @@ namespace Libs.PathFinder
 
         public void Reset(int dimX, int dimY, float defaultCost = 1.0f)
         {
-            if (defaultCost < 1) { throw new Sys.ArgumentOutOfRangeException("Argument defaultCost with value " + defaultCost.ToString() + " is invalid. The cost of traversing a cell cannot be less than one"); }
+            if (defaultCost < 1.0f) { throw new Sys.ArgumentOutOfRangeException("Argument defaultCost with value " + defaultCost.ToString() + " is invalid. The cost of traversing a cell cannot be less than one"); }
             this.DefaultCost = defaultCost;
             this.Weights = new float[dimX * dimY];
             this.DimX = dimX;
@@ -155,7 +159,12 @@ namespace Libs.PathFinder
                 else
                 {
                     this.Weights = new float[wTrms.Length];
-                    for (int i = 0; i < wTrms.Length; i++) { if (!this.ParseF(wTrms[i], out this.Weights[i])) { throw new Sys.Exception(); } }
+                    string cur = string.Empty;
+                    for (int i = 0; i < wTrms.Length; i++)
+                    {
+                        cur = wTrms[i];
+                        if (cur == "infinity") { this.Weights[i] = float.PositiveInfinity; } else if (!this.ParseF(cur, out this.Weights[i])) { throw new Sys.Exception(); }
+                    }
                 }
             } else { throw new Sys.Exception(); }
         }
@@ -400,14 +409,86 @@ namespace Libs.PathFinder
 #if DEBUG
 internal static class Test
 {
-    internal static int Main(string[] args)
+    private static void Run(int Size, LibPF.Position start, LibPF.Position end, params LibPF.Position[] blocks)
     {
-        LibPF.Grid g = new LibPF.Grid(100, 50, defaultCost: 1.0f);
+        if (Size > 99) { Size = 99; }
+        LibPF.Grid g = new LibPF.Grid(Size, Size, defaultCost: 1.0f);
+        foreach (LibPF.Position block in blocks) { g.BlockCell(block); }
         string json = g.ToJSon();
         g.Reset(1, 1, defaultCost: 1.0f);
         g.FromJSon(json);
-        if (g.ToJSon() == json) { Sys.Console.Write("Tested OK"); } else { Sys.Console.Write("OOPPSS"); }
-        g = null;
+        if (g.ToJSon() == json)
+        {
+            Sys.Console.Write("Tested OK");
+            Sys.Console.WriteLine();
+            long preTime = Sys.DateTime.Now.Ticks;
+            LibPF.Position[] path = g.GetPath(start, end, LibPF.MovementPatterns.Full);
+            long posTime = Sys.DateTime.Now.Ticks;
+            Sys.Console.WriteLine("Time: " + Sys.TimeSpan.FromTicks(posTime - preTime).ToString());
+            Sys.Console.WriteLine();
+            Sys.Console.WriteLine();
+            Sys.Console.Write("_");
+            for (int x = 0; x < Size; x++) { Sys.Console.Write("_" + ((x < 10) ? ("_" + x.ToString()) : x.ToString()) + "___"); }
+            Sys.Console.WriteLine();
+            Sys.ConsoleColor stdColor = Sys.Console.ForegroundColor;
+            bool IsUsed = false;
+            for (int y = 0; y < Size; y++)
+            {
+                Sys.Console.Write("|");
+                for (int x = 0; x < Size; x++) { Sys.Console.Write("     |"); }
+                Sys.Console.WriteLine();
+                Sys.Console.Write("|");
+                for (int x = 0; x < Size; x++)
+                {
+                    IsUsed = false;
+                    Sys.Console.Write(" ");
+                    foreach (LibPF.Position p in path) { if (p.X == x && p.Y == y) { IsUsed = true; break; } }
+                    if (IsUsed)
+                    {
+                        Sys.Console.ForegroundColor = Sys.ConsoleColor.Green;
+                        Sys.Console.Write("-U-");
+                    }
+                    else if (g.GetCellCost(x, y) == float.PositiveInfinity)
+                    {
+                        Sys.Console.ForegroundColor = Sys.ConsoleColor.Red;
+                        Sys.Console.Write("xXx");
+                    } else { Sys.Console.Write("   "); }
+                    Sys.Console.ForegroundColor = stdColor;
+                    Sys.Console.Write(" |");
+                }
+                Sys.Console.Write(y.ToString());
+                Sys.Console.WriteLine();
+                Sys.Console.Write("|");
+                for (int x = 0; x < Size; x++) { Sys.Console.Write("_____|"); }
+                Sys.Console.WriteLine();
+            }
+        } else { Sys.Console.Write("OOPPSS"); }
+    }
+
+    internal static int Main(string[] args)
+    {
+        global::Test.Run(10,                /* SIZE - 0 to 9 */
+            new LibPF.Position(0, 0),       /* Start position (0 based, x-y) */
+            new LibPF.Position(9, 9),       /* End position (0 based, x-y) */
+            new LibPF.Position[]
+            {
+                new LibPF.Position(2, 1),   /* Blocked, x-y */
+                new LibPF.Position(2, 2),   /* Blocked, x-y */
+                new LibPF.Position(2, 3),   /* Blocked, x-y */
+                new LibPF.Position(4, 2),   /* Blocked, x-y */
+                new LibPF.Position(4, 5),   /* Blocked, x-y */
+                new LibPF.Position(4, 6),   /* Blocked, x-y */
+                new LibPF.Position(4, 7),   /* Blocked, x-y */
+                new LibPF.Position(4, 8),   /* Blocked, x-y */
+                new LibPF.Position(4, 9),   /* Blocked, x-y */
+                new LibPF.Position(5, 2),   /* Blocked, x-y */
+                new LibPF.Position(5, 5),   /* Blocked, x-y */
+                new LibPF.Position(6, 5),   /* Blocked, x-y */
+                new LibPF.Position(6, 7),   /* Blocked, x-y */
+                new LibPF.Position(7, 7),   /* Blocked, x-y */
+                new LibPF.Position(8, 7),   /* Blocked, x-y */
+                new LibPF.Position(9, 7)    /* Blocked, x-y */
+            });
         Sys.Console.ReadKey();
         return 0;
     }
