@@ -3,6 +3,7 @@ using SysClG = global::System.Collections.Generic;
 using SysCoS = global::System.Runtime.CompilerServices;
 using SysDiag = global::System.Diagnostics;
 using LibPF = global::Libs.PathFinder;
+using Mn = global::Test;
 #region Assembly
 [assembly: Sys.Reflection.AssemblyTitle("PathFinder")]
 [assembly: Sys.Reflection.AssemblyDescription("")]
@@ -406,91 +407,122 @@ namespace Libs.PathFinder
         }
     }
 }
-#if DEBUG
-internal static class Test
+public static class Test
 {
-    private static void Run(int Size, LibPF.Position start, LibPF.Position end, params LibPF.Position[] blocks)
+    private enum Used : byte
     {
-        if (Size > 99) { Size = 99; }
-        LibPF.Grid g = new LibPF.Grid(Size, Size, defaultCost: 1.0f);
+        Not = 0,
+        Start = 1,
+        Path = 2,
+        End = 3
+    }
+
+    public static void Run(int SizeX, int SizeY, LibPF.Position start, LibPF.Position end, params LibPF.Position[] blocks)
+    {
+        if (SizeX > 99) { SizeX = 99; }
+        if (SizeY > 99) { SizeY = 99; }
+        LibPF.Grid g = new LibPF.Grid(SizeX, SizeY, defaultCost: 1.0f);
         foreach (LibPF.Position block in blocks) { g.BlockCell(block); }
-        string json = g.ToJSon();
+        long preTime = Sys.DateTime.Now.Ticks;
+        string AUX = g.ToJSon();
         g.Reset(1, 1, defaultCost: 1.0f);
-        g.FromJSon(json);
-        if (g.ToJSon() == json)
+        g.FromJSon(AUX);
+        if (g.ToJSon() == AUX)
         {
-            Sys.Console.Write("Tested OK");
-            Sys.Console.WriteLine();
-            long preTime = Sys.DateTime.Now.Ticks;
-            LibPF.Position[] path = g.GetPath(start, end, LibPF.MovementPatterns.Full);
             long posTime = Sys.DateTime.Now.Ticks;
-            Sys.Console.WriteLine("Time: " + Sys.TimeSpan.FromTicks(posTime - preTime).ToString());
+            AUX = string.Empty;
+            Sys.Console.Write("Time (JSon Conversion): " + Sys.TimeSpan.FromTicks(posTime - preTime).ToString());
+            Sys.Console.WriteLine();
+            preTime = Sys.DateTime.Now.Ticks;
+            LibPF.Position[] path = g.GetPath(start, end, LibPF.MovementPatterns.Full);
+            posTime = Sys.DateTime.Now.Ticks;
+            Sys.Console.WriteLine("Time (Find Path): " + Sys.TimeSpan.FromTicks(posTime - preTime).ToString());
+            preTime = Sys.DateTime.Now.Ticks;
             Sys.Console.WriteLine();
             Sys.Console.WriteLine();
-            Sys.Console.Write("_");
-            for (int x = 0; x < Size; x++) { Sys.Console.Write("_" + ((x < 10) ? ("_" + x.ToString()) : x.ToString()) + "___"); }
+            Sys.Console.Write(" _");
+            for (int x = 0; x < SizeX; x++) { Sys.Console.Write("_" + ((x < 10) ? ("_" + x.ToString()) : x.ToString()) + "___"); }
             Sys.Console.WriteLine();
             Sys.ConsoleColor stdColor = Sys.Console.ForegroundColor;
-            bool IsUsed = false;
-            for (int y = 0; y < Size; y++)
+            Mn.Used IsUsed = Mn.Used.Not;
+            for (int y = 0; y < SizeY; y++)
             {
-                Sys.Console.Write("|");
-                for (int x = 0; x < Size; x++) { Sys.Console.Write("     |"); }
+                Sys.Console.Write(" |");
+                for (int x = 0; x < SizeX; x++) { Sys.Console.Write("     |"); }
                 Sys.Console.WriteLine();
-                Sys.Console.Write("|");
-                for (int x = 0; x < Size; x++)
+                Sys.Console.Write(" |");
+                for (int x = 0; x < SizeX; x++)
                 {
-                    IsUsed = false;
-                    Sys.Console.Write(" ");
-                    foreach (LibPF.Position p in path) { if (p.X == x && p.Y == y) { IsUsed = true; break; } }
-                    if (IsUsed)
+                    IsUsed = Mn.Used.Not;
+                    for (int ps = 0; ps < path.Length; ps++)
                     {
-                        Sys.Console.ForegroundColor = Sys.ConsoleColor.Green;
-                        Sys.Console.Write("-U-");
+                        LibPF.Position p = path[ps];
+                        if (p.X == x && p.Y == y)
+                        {
+                            IsUsed = (ps == 0 ? Mn.Used.Start : ((ps == (path.Length - 1)) ? Mn.Used.End : Mn.Used.Path));
+                            break;
+                        }
                     }
-                    else if (g.GetCellCost(x, y) == float.PositiveInfinity)
+                    Sys.Console.Write(" ");
+                    switch (IsUsed)
                     {
-                        Sys.Console.ForegroundColor = Sys.ConsoleColor.Red;
-                        Sys.Console.Write("xXx");
-                    } else { Sys.Console.Write("   "); }
+                        case Mn.Used.Not:
+                            if (g.GetCellCost(x, y) == float.PositiveInfinity)
+                            {
+                                AUX = "xXx";
+                                Sys.Console.ForegroundColor = Sys.ConsoleColor.Red;
+                            }
+                            else
+                            {
+                                AUX = "   ";
+                                Sys.Console.ForegroundColor = stdColor;
+                            }
+                            break;
+                        case Mn.Used.Start:
+                            AUX = "-S-";
+                            Sys.Console.ForegroundColor = Sys.ConsoleColor.Blue;
+                            break;
+                        case Mn.Used.Path:
+                            AUX = "-U-";
+                            Sys.Console.ForegroundColor = Sys.ConsoleColor.Green;
+                            break;
+                        case Mn.Used.End:
+                            AUX = "-E-";
+                            Sys.Console.ForegroundColor = Sys.ConsoleColor.Cyan;
+                            break;
+                    }
+                    Sys.Console.Write(AUX);
                     Sys.Console.ForegroundColor = stdColor;
                     Sys.Console.Write(" |");
                 }
                 Sys.Console.Write(y.ToString());
                 Sys.Console.WriteLine();
-                Sys.Console.Write("|");
-                for (int x = 0; x < Size; x++) { Sys.Console.Write("_____|"); }
+                Sys.Console.Write(" |");
+                for (int x = 0; x < SizeX; x++) { Sys.Console.Write("_____|"); }
                 Sys.Console.WriteLine();
             }
-        } else { Sys.Console.Write("OOPPSS"); }
+            posTime = Sys.DateTime.Now.Ticks;
+            Sys.Console.WriteLine();
+            Sys.Console.WriteLine();
+            Sys.Console.WriteLine("Time (Draw Interface): " + Sys.TimeSpan.FromTicks(posTime - preTime).ToString());
+        } else { Sys.Console.Write("Could Not Convert JSon | This is the first test to see if the Grid can be saved and loaded from files."); }
     }
 
     internal static int Main(string[] args)
     {
-        global::Test.Run(10,                /* SIZE - 0 to 9 */
+        Mn.Run(15, 5,             /* SIZE - X(0 to 9) | Y(0 to 9) */
             new LibPF.Position(0, 0),       /* Start position (0 based, x-y) */
-            new LibPF.Position(9, 9),       /* End position (0 based, x-y) */
+            new LibPF.Position(14, 4),      /* End position (0 based, x-y) */
             new LibPF.Position[]
             {
-                new LibPF.Position(2, 1),   /* Blocked, x-y */
-                new LibPF.Position(2, 2),   /* Blocked, x-y */
-                new LibPF.Position(2, 3),   /* Blocked, x-y */
-                new LibPF.Position(4, 2),   /* Blocked, x-y */
-                new LibPF.Position(4, 5),   /* Blocked, x-y */
-                new LibPF.Position(4, 6),   /* Blocked, x-y */
-                new LibPF.Position(4, 7),   /* Blocked, x-y */
-                new LibPF.Position(4, 8),   /* Blocked, x-y */
-                new LibPF.Position(4, 9),   /* Blocked, x-y */
-                new LibPF.Position(5, 2),   /* Blocked, x-y */
-                new LibPF.Position(5, 5),   /* Blocked, x-y */
-                new LibPF.Position(6, 5),   /* Blocked, x-y */
-                new LibPF.Position(6, 7),   /* Blocked, x-y */
-                new LibPF.Position(7, 7),   /* Blocked, x-y */
-                new LibPF.Position(8, 7),   /* Blocked, x-y */
-                new LibPF.Position(9, 7)    /* Blocked, x-y */
+                new LibPF.Position(1, 1),
+                new LibPF.Position(13, 1),
+                new LibPF.Position(13, 2),
+                new LibPF.Position(13, 3),
+                new LibPF.Position(13, 4)
             });
+        Sys.Console.WriteLine("Press Any Key to Close...");
         Sys.Console.ReadKey();
         return 0;
     }
 }
-#endif
