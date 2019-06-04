@@ -510,7 +510,7 @@ public static class Test
 
     internal static int Main(string[] args)
     {
-        Mn.Run(15, 5,             /* SIZE - X(0 to 9) | Y(0 to 9) */
+            Mn.Run(15, 5,                   /* SIZE - X(0 to 9) | Y(0 to 9) */
             new LibPF.Position(0, 0),       /* Start position (0 based, x-y) */
             new LibPF.Position(14, 4),      /* End position (0 based, x-y) */
             new LibPF.Position[]
